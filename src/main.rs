@@ -27,7 +27,7 @@ pub struct IPSModel {
 pub struct Patient {
     pub name: String,
     pub given: String,
-    pub dob: String,
+    pub dob: DateTime,
     pub gender: String,
     pub nation: String,
     pub practitioner: String,
