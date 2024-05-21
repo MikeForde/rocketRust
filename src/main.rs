@@ -8,7 +8,6 @@ use mongodb::bson::{doc, oid::ObjectId};
 use dotenv::dotenv;
 use std::env;
 use bson::{DateTime};
-use chrono::Utc;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IPSModel {
