@@ -81,6 +81,8 @@ async fn delete_ips_by_practitioner(practitioner: String, db: &State<DbConnectio
     // Access the collection
     let collection = db.db.collection::<IPSModel>("ipsalts");
 
+    println!("Deleting documents where the practitioner field matches: {}", practitioner);
+
     // Delete documents where the practitioner field matches the given value
     let filter = doc! { "patient.practitioner": practitioner };
     let result = collection.delete_many(filter, None).await.unwrap();
