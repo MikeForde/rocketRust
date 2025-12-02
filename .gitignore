@@ -2,6 +2,18 @@
 target/**
 .env
 
+# BUT allow this directory
+!target/
+!target/release/
+!target/release/hello_cargo
+
+# Ignore all other build artefacts inside release/
+target/release/*.d
+target/release/*.rlib
+target/release/*.rmeta
+target/release/deps/
+target/release/build/
+
 # macOS junk
 .DS_Store
 **/.DS_Store
