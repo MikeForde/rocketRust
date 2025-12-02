@@ -5,7 +5,7 @@ target/**
 # BUT allow this directory
 !target/
 !target/release/
-!target/release/hello_cargo
+!target/release/rocketRust
 
 # Ignore all other build artefacts inside release/
 target/release/*.d
