@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/devcontainers/rust:1-1-bullseye
+FROM mcr.microsoft.com/devcontainers/rust:1
 
 WORKDIR /app
 COPY target/release/rocketRust ./rocketRust
