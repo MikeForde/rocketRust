@@ -1,11 +1,44 @@
 use chrono::NaiveDateTime;
 use sqlx::{FromRow, MySql, Pool};
+use serde::Serialize;
 
 use crate::models::{
     Allergy, Condition, IPSModel, Immunization, Medication, Observation, Patient,
 };
 
 pub type MySqlPool = Pool<MySql>;
+
+#[derive(Debug, FromRow, Serialize)]
+pub struct PackageSummary {
+    #[sqlx(rename = "packageUUID")]
+    pub package_uuid: String,
+
+    #[sqlx(rename = "patientName")]
+    pub patient_name: String,
+
+    #[sqlx(rename = "patientGiven")]
+    pub patient_given: String,
+
+    #[sqlx(rename = "timeStamp")]
+    pub time_stamp: NaiveDateTime,
+}
+
+pub async fn list_recent_packages(
+    pool: &MySqlPool,
+    limit: i64,
+) -> Result<Vec<PackageSummary>, sqlx::Error> {
+    let rows = sqlx::query_as::<_, PackageSummary>(
+        r#"SELECT `packageUUID`, `patientName`, `patientGiven`, `timeStamp`
+           FROM `ipsAlt`
+           ORDER BY `timeStamp` DESC
+           LIMIT ?"#,
+    )
+    .bind(limit)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows)
+}
 
 /// Row as stored in the `ipsAlt` table (flat, like your Sequelize IPSModel)
 #[derive(Debug, FromRow)]
