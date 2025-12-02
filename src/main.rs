@@ -64,74 +64,93 @@ struct MedicationRow {
     #[sqlx(rename = "med_dosage")]
     dosage: String,
 
+    // nullable in DB -> Option<String>
     #[sqlx(rename = "med_system")]
-    system: String,
+    system: Option<String>,
 
     #[sqlx(rename = "med_code")]
-    code: String,
+    code: Option<String>,
 
     #[sqlx(rename = "med_status")]
-    status: String,
+    status: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
 struct AllergyRow {
     #[sqlx(rename = "all_name")]
     name: String,
+
     #[sqlx(rename = "all_criticality")]
-    criticality: String,
+    criticality: Option<String>,
+
     #[sqlx(rename = "all_date")]
     date: NaiveDateTime,
+
     #[sqlx(rename = "all_system")]
-    system: String,
+    system: Option<String>,
+
     #[sqlx(rename = "all_code")]
-    code: String,
+    code: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
 struct ConditionRow {
     #[sqlx(rename = "con_name")]
     name: String,
+
     #[sqlx(rename = "con_date")]
     date: NaiveDateTime,
+
     #[sqlx(rename = "con_system")]
-    system: String,
+    system: Option<String>,
+
     #[sqlx(rename = "con_code")]
-    code: String,
+    code: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
 struct ObservationRow {
     #[sqlx(rename = "ob_name")]
     name: String,
+
     #[sqlx(rename = "ob_date")]
     date: NaiveDateTime,
+
     #[sqlx(rename = "ob_value")]
-    value: String,
+    value: Option<String>,
+
     #[sqlx(rename = "ob_system")]
-    system: String,
+    system: Option<String>,
+
     #[sqlx(rename = "ob_code")]
-    code: String,
+    code: Option<String>,
+
     #[sqlx(rename = "valueCode")]
-    value_code: String,
+    value_code: Option<String>,
+
     #[sqlx(rename = "bodySite")]
-    body_site: String,
+    body_site: Option<String>,
+
     #[sqlx(rename = "ob_status")]
-    status: String,
+    status: Option<String>,
 }
 
 #[derive(Debug, FromRow)]
 struct ImmunizationRow {
     #[sqlx(rename = "imm_name")]
     name: String,
+
     #[sqlx(rename = "imm_system")]
-    system: String,
+    system: Option<String>,
+
     #[sqlx(rename = "imm_date")]
     date: NaiveDateTime,
+
     #[sqlx(rename = "imm_code")]
-    code: String,
+    code: Option<String>,
+
     #[sqlx(rename = "imm_status")]
-    status: String,
+    status: Option<String>,
 }
 
 // =================== API JSON MODELS ===================
@@ -215,7 +234,7 @@ pub struct Immunization {
 async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<IPSModel>> {
     // 1. Fetch main IPS row
     let ips_row: Option<IPSRow> =
-        sqlx::query_as::<_, IPSRow>(r#"SELECT * FROM ipsAlt WHERE packageUUID = ? LIMIT 1"#)
+        sqlx::query_as::<_, IPSRow>(r#"SELECT * FROM `ipsAlt` WHERE `packageUUID` = ? LIMIT 1"#)
             .bind(&package_uuid)
             .fetch_optional(pool.inner())
             .await
@@ -226,14 +245,14 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
     // 2. Fetch child records using the FK (assumed IPSModelId)
     let medications_rows: Vec<MedicationRow> = sqlx::query_as::<_, MedicationRow>(
         r#"SELECT
-           `name`   AS med_name,
-           `date`   AS med_date,
-           `dosage` AS med_dosage,
-           `system` AS med_system,
-           `code`   AS med_code,
-           `status` AS med_status
-       FROM `Medications`
-       WHERE `IPSModelId` = ?"#,
+               `name`   AS med_name,
+               `date`   AS med_date,
+               `dosage` AS med_dosage,
+               `system` AS med_system,
+               `code`   AS med_code,
+               `status` AS med_status
+           FROM `Medications`
+           WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
     .fetch_all(pool.inner())
@@ -242,13 +261,13 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
 
     let allergies_rows: Vec<AllergyRow> = sqlx::query_as::<_, AllergyRow>(
         r#"SELECT
-           `name`        AS all_name,
-           `criticality` AS all_criticality,
-           `date`        AS all_date,
-           `system`      AS all_system,
-           `code`        AS all_code
-       FROM `Allergies`
-       WHERE `IPSModelId` = ?"#,
+               `name`        AS all_name,
+               `criticality` AS all_criticality,
+               `date`        AS all_date,
+               `system`      AS all_system,
+               `code`        AS all_code
+           FROM `Allergies`
+           WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
     .fetch_all(pool.inner())
@@ -257,12 +276,12 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
 
     let conditions_rows: Vec<ConditionRow> = sqlx::query_as::<_, ConditionRow>(
         r#"SELECT
-           `name`   AS con_name,
-           `date`   AS con_date,
-           `system` AS con_system,
-           `code`   AS con_code
-       FROM `Conditions`
-       WHERE `IPSModelId` = ?"#,
+               `name`   AS con_name,
+               `date`   AS con_date,
+               `system` AS con_system,
+               `code`   AS con_code
+           FROM `Conditions`
+           WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
     .fetch_all(pool.inner())
@@ -271,16 +290,16 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
 
     let observations_rows: Vec<ObservationRow> = sqlx::query_as::<_, ObservationRow>(
         r#"SELECT
-           `name`      AS ob_name,
-           `date`      AS ob_date,
-           `value`     AS ob_value,
-           `system`    AS ob_system,
-           `code`      AS ob_code,
-           `valueCode` AS valueCode,
-           `bodySite`  AS bodySite,
-           `status`    AS ob_status
-       FROM `Observations`
-       WHERE `IPSModelId` = ?"#,
+               `name`      AS ob_name,
+               `date`      AS ob_date,
+               `value`     AS ob_value,
+               `system`    AS ob_system,
+               `code`      AS ob_code,
+               `valueCode` AS valueCode,
+               `bodySite`  AS bodySite,
+               `status`    AS ob_status
+           FROM `Observations`
+           WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
     .fetch_all(pool.inner())
@@ -289,13 +308,13 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
 
     let immunizations_rows: Vec<ImmunizationRow> = sqlx::query_as::<_, ImmunizationRow>(
         r#"SELECT
-           `name`   AS imm_name,
-           `system` AS imm_system,
-           `date`   AS imm_date,
-           `code`   AS imm_code,
-           `status` AS imm_status
-       FROM `Immunizations`
-       WHERE `IPSModelId` = ?"#,
+               `name`   AS imm_name,
+               `system` AS imm_system,
+               `date`   AS imm_date,
+               `code`   AS imm_code,
+               `status` AS imm_status
+           FROM `Immunizations`
+           WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
     .fetch_all(pool.inner())
@@ -321,9 +340,9 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
             name: m.name,
             date: m.date,
             dosage: m.dosage,
-            system: m.system,
-            code: m.code,
-            status: m.status,
+            system: m.system.unwrap_or_default(),
+            code: m.code.unwrap_or_default(),
+            status: m.status.unwrap_or_default(),
         })
         .collect();
 
@@ -331,10 +350,10 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
         .into_iter()
         .map(|a| Allergy {
             name: a.name,
-            criticality: a.criticality,
+            criticality: a.criticality.unwrap_or_default(),
             date: a.date,
-            system: a.system,
-            code: a.code,
+            system: a.system.unwrap_or_default(),
+            code: a.code.unwrap_or_default(),
         })
         .collect();
 
@@ -343,8 +362,8 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
         .map(|c| Condition {
             name: c.name,
             date: c.date,
-            system: c.system,
-            code: c.code,
+            system: c.system.unwrap_or_default(),
+            code: c.code.unwrap_or_default(),
         })
         .collect();
 
@@ -353,12 +372,12 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
         .map(|o| Observation {
             name: o.name,
             date: o.date,
-            value: o.value,
-            system: o.system,
-            code: o.code,
-            value_code: o.value_code,
-            body_site: o.body_site,
-            status: o.status,
+            value: o.value.unwrap_or_default(),
+            system: o.system.unwrap_or_default(),
+            code: o.code.unwrap_or_default(),
+            value_code: o.value_code.unwrap_or_default(),
+            body_site: o.body_site.unwrap_or_default(),
+            status: o.status.unwrap_or_default(),
         })
         .collect();
 
@@ -366,10 +385,10 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
         .into_iter()
         .map(|i| Immunization {
             name: i.name,
-            system: i.system,
+            system: i.system.unwrap_or_default(),
             date: i.date,
-            code: i.code,
-            status: i.status,
+            code: i.code.unwrap_or_default(),
+            status: i.status.unwrap_or_default(),
         })
         .collect();
 
@@ -392,7 +411,7 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
 async fn delete_ips_by_practitioner(practitioner: String, pool: &State<MySqlPool>) -> Json<u64> {
     // NOTE: This assumes you have ON DELETE CASCADE set up for child tables.
     // Otherwise you'd need to delete Medications/Allergies/etc first.
-    let result = sqlx::query(r#"DELETE FROM ipsAlt WHERE patientPractitioner = ?"#)
+    let result = sqlx::query(r#"DELETE FROM `ipsAlt` WHERE `patientPractitioner` = ?"#)
         .bind(&practitioner)
         .execute(pool.inner())
         .await
