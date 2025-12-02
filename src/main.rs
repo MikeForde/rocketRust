@@ -9,6 +9,7 @@ use std::env;
 
 use chrono::NaiveDateTime;
 use sqlx::{mysql::MySqlPoolOptions, FromRow, MySql, Pool};
+use rocket_dyn_templates::{context, Template};
 
 type MySqlPool = Pool<MySql>;
 
@@ -16,7 +17,7 @@ type MySqlPool = Pool<MySql>;
 #[derive(Debug, FromRow)]
 struct IPSRow {
     #[sqlx(rename = "id")]
-    id: i64, // assuming `id` is the PK (AUTO_INCREMENT) on ipsAlt
+    id: i64, // `id` is the PK (AUTO_INCREMENT) on ipsAlt
 
     #[sqlx(rename = "packageUUID")]
     package_uuid: String,
@@ -228,19 +229,22 @@ pub struct Immunization {
     pub status: String,
 }
 
-// =================== ROUTES ===================
+// =================== SHARED DB LOGIC ===================
 
-#[get("/ips/<package_uuid>")]
-async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<IPSModel>> {
+async fn load_ips(
+    package_uuid: &str,
+    pool: &MySqlPool,
+) -> Result<Option<IPSModel>, sqlx::Error> {
     // 1. Fetch main IPS row
     let ips_row: Option<IPSRow> =
         sqlx::query_as::<_, IPSRow>(r#"SELECT * FROM `ipsAlt` WHERE `packageUUID` = ? LIMIT 1"#)
-            .bind(&package_uuid)
-            .fetch_optional(pool.inner())
-            .await
-            .expect("Failed to query ipsAlt");
+            .bind(package_uuid)
+            .fetch_optional(pool)
+            .await?;
 
-    let ips_row = ips_row?; // return None if not found
+    let Some(ips_row) = ips_row else {
+        return Ok(None);
+    };
 
     // 2. Fetch child records using the FK (assumed IPSModelId)
     let medications_rows: Vec<MedicationRow> = sqlx::query_as::<_, MedicationRow>(
@@ -255,9 +259,8 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
            WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
-    .fetch_all(pool.inner())
-    .await
-    .expect("Failed to query Medications");
+    .fetch_all(pool)
+    .await?;
 
     let allergies_rows: Vec<AllergyRow> = sqlx::query_as::<_, AllergyRow>(
         r#"SELECT
@@ -270,9 +273,8 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
            WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
-    .fetch_all(pool.inner())
-    .await
-    .expect("Failed to query Allergies");
+    .fetch_all(pool)
+    .await?;
 
     let conditions_rows: Vec<ConditionRow> = sqlx::query_as::<_, ConditionRow>(
         r#"SELECT
@@ -284,9 +286,8 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
            WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
-    .fetch_all(pool.inner())
-    .await
-    .expect("Failed to query Conditions");
+    .fetch_all(pool)
+    .await?;
 
     let observations_rows: Vec<ObservationRow> = sqlx::query_as::<_, ObservationRow>(
         r#"SELECT
@@ -302,9 +303,8 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
            WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
-    .fetch_all(pool.inner())
-    .await
-    .expect("Failed to query Observations");
+    .fetch_all(pool)
+    .await?;
 
     let immunizations_rows: Vec<ImmunizationRow> = sqlx::query_as::<_, ImmunizationRow>(
         r#"SELECT
@@ -317,9 +317,8 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
            WHERE `IPSModelId` = ?"#,
     )
     .bind(ips_row.id)
-    .fetch_all(pool.inner())
-    .await
-    .expect("Failed to query Immunizations");
+    .fetch_all(pool)
+    .await?;
 
     // 3. Map rows into API structs
     let patient = Patient {
@@ -403,14 +402,48 @@ async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<I
         immunizations,
     };
 
-    Some(Json(ips_model))
+    Ok(Some(ips_model))
 }
 
-// You normally want DELETE, but keeping GET for compatibility with your old route.
+// =================== ROUTES ===================
+
+// Landing page: simple UUID form
+#[get("/")]
+fn index() -> Template {
+    Template::render("index", context! {})
+}
+
+// HTML view that renders IPS nicely
+#[get("/ipsview?<uuid>")]
+async fn ips_view(uuid: String, pool: &State<MySqlPool>) -> Option<Template> {
+    let ips = load_ips(&uuid, pool.inner())
+        .await
+        .expect("Failed to load IPS");
+
+    ips.map(|model| {
+        Template::render(
+            "ips",
+            context! {
+                uuid: uuid,
+                ips: model,
+            },
+        )
+    })
+}
+
+// Existing JSON API (unchanged behaviour)
+#[get("/ips/<package_uuid>")]
+async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<IPSModel>> {
+    let ips = load_ips(&package_uuid, pool.inner())
+        .await
+        .expect("Failed to load IPS");
+
+    ips.map(Json)
+}
+
+// You normally want DELETE, but keeping GET for compatibility
 #[get("/ips/delbypra/<practitioner>")]
 async fn delete_ips_by_practitioner(practitioner: String, pool: &State<MySqlPool>) -> Json<u64> {
-    // NOTE: This assumes you have ON DELETE CASCADE set up for child tables.
-    // Otherwise you'd need to delete Medications/Allergies/etc first.
     let result = sqlx::query(r#"DELETE FROM `ipsAlt` WHERE `patientPractitioner` = ?"#)
         .bind(&practitioner)
         .execute(pool.inner())
@@ -448,5 +481,14 @@ async fn rocket() -> Rocket<Build> {
 
     rocket::build()
         .manage(pool)
-        .mount("/", routes![get_ips, delete_ips_by_practitioner])
+        .attach(Template::fairing())
+        .mount(
+            "/",
+            routes![
+                index,
+                ips_view,
+                get_ips,
+                delete_ips_by_practitioner
+            ],
+        )
 }

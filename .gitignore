@@ -14,6 +14,9 @@ target/release/*.rmeta
 target/release/deps/
 target/release/build/
 
+# Let's no keep updating Vendor as we are sticking with a pre-compile binary approach during development
+vendor/
+
 # macOS junk
 .DS_Store
 **/.DS_Store

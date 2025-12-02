@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IPS {{ uuid }}</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: #f5f5f5;
+            padding: 24px;
+        }
+        .page {
+            max-width: 960px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 8px;
+            padding: 24px 28px 32px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+        h1 {
+            font-size: 22px;
+            margin-bottom: 4px;
+        }
+        h2 {
+            margin-top: 24px;
+            margin-bottom: 8px;
+        }
+        h3 {
+            margin-top: 18px;
+            margin-bottom: 6px;
+        }
+        .meta {
+            color: #666;
+            font-size: 13px;
+            margin-bottom: 16px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 4px;
+        }
+        th, td {
+            border: 1px solid #e5e5e5;
+            padding: 6px 8px;
+            font-size: 13px;
+        }
+        th {
+            background: #f3f3f3;
+            text-align: left;
+        }
+        .pill {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+        .section-empty {
+            font-size: 13px;
+            color: #888;
+            font-style: italic;
+        }
+        .back-link {
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+        .back-link a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+<div class="page">
+    <div class="back-link">
+        <a href="/">← Back to search</a>
+    </div>
+
+    <h1>International Patient Summary</h1>
+    <div class="meta">
+        Package UUID: <code>{{ uuid }}</code><br>
+        Timestamp: {{ ips.time_stamp }}
+    </div>
+
+    <h2>Patient</h2>
+    <p>
+        <strong>{{ ips.patient.name }} {{ ips.patient.given }}</strong><br>
+        DOB: {{ ips.patient.dob }}<br>
+        Gender: {{ ips.patient.gender | default(value="") }}<br>
+        Nation: {{ ips.patient.nation }}<br>
+        Practitioner: {{ ips.patient.practitioner }}<br>
+        {% if ips.patient.organization %}
+        Organisation: {{ ips.patient.organization }}<br>
+        {% endif %}
+        {% if ips.patient.identifier %}
+            Identifier: {{ ips.patient.identifier }}<br>
+        {% endif %}
+        {% if ips.patient.identifier2 %}
+            Identifier 2: {{ ips.patient.identifier2 }}<br>
+        {% endif %}
+    </p>
+
+    <h2>Medications</h2>
+    {% if ips.medications | length > 0 %}
+        <table>
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Dosage</th>
+                <th>Date</th>
+                <th>System / Code</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for m in ips.medications %}
+                <tr>
+                    <td>{{ m.name }}</td>
+                    <td>{{ m.dosage }}</td>
+                    <td>{{ m.date }}</td>
+                    <td>{{ m.system }}{% if m.code %} ({{ m.code }}){% endif %}</td>
+                    <td>{{ m.status }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="section-empty">No medications recorded.</p>
+    {% endif %}
+
+    <h2>Conditions</h2>
+    {% if ips.conditions | length > 0 %}
+        <table>
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Date</th>
+                <th>System / Code</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for c in ips.conditions %}
+                <tr>
+                    <td>{{ c.name }}</td>
+                    <td>{{ c.date }}</td>
+                    <td>{{ c.system }}{% if c.code %} ({{ c.code }}){% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="section-empty">No conditions recorded.</p>
+    {% endif %}
+
+    <h2>Allergies</h2>
+    {% if ips.allergies | length > 0 %}
+        <table>
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Criticality</th>
+                <th>Date</th>
+                <th>System / Code</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for a in ips.allergies %}
+                <tr>
+                    <td>{{ a.name }}</td>
+                    <td>{{ a.criticality }}</td>
+                    <td>{{ a.date }}</td>
+                    <td>{{ a.system }}{% if a.code %} ({{ a.code }}){% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="section-empty">No allergies recorded.</p>
+    {% endif %}
+
+    <h2>Observations</h2>
+    {% if ips.observations | length > 0 %}
+        <table>
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Date</th>
+                <th>Value</th>
+                <th>System / Code</th>
+                <th>Body Site</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for o in ips.observations %}
+                <tr>
+                    <td>{{ o.name }}</td>
+                    <td>{{ o.date }}</td>
+                    <td>{{ o.value }}</td>
+                    <td>{{ o.system }}{% if o.code %} ({{ o.code }}){% endif %}</td>
+                    <td>{{ o.body_site }}</td>
+                    <td>{{ o.status }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="section-empty">No observations recorded.</p>
+    {% endif %}
+
+    <h2>Immunizations</h2>
+    {% if ips.immunizations | length > 0 %}
+        <table>
+            <thead>
+            <tr>
+                <th>Name</th>
+                <th>Date</th>
+                <th>System / Code</th>
+                <th>Status</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for i in ips.immunizations %}
+                <tr>
+                    <td>{{ i.name }}</td>
+                    <td>{{ i.date }}</td>
+                    <td>{{ i.system }}{% if i.code %} ({{ i.code }}){% endif %}</td>
+                    <td>{{ i.status }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="section-empty">No immunizations recorded.</p>
+    {% endif %}
+</div>
+</body>
+</html>
