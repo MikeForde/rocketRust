@@ -1,2 +1,7 @@
-/target
+# Ignore everything under target/
+target/**
 .env
+
+# macOS junk
+.DS_Store
+**/.DS_Store

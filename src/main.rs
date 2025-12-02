@@ -1,104 +1,433 @@
-#[macro_use] extern crate rocket;
+#[macro_use]
+extern crate rocket;
 
-use rocket::{Build, Rocket, State};
-use rocket::serde::json::Json;
-use serde::{Deserialize, Serialize};
-use mongodb::{Client, Database, options::ClientOptions};
-use mongodb::bson::{doc, oid::ObjectId};
 use dotenv::dotenv;
+use rocket::serde::json::Json;
+use rocket::serde::{Deserialize, Serialize};
+use rocket::{Build, Rocket, State};
 use std::env;
-use bson::{DateTime};
+
+use chrono::NaiveDateTime;
+use sqlx::{mysql::MySqlPoolOptions, FromRow, MySql, Pool};
+
+type MySqlPool = Pool<MySql>;
+
+/// Row as stored in the `ipsAlt` table (flat, like your Sequelize IPSModel)
+#[derive(Debug, FromRow)]
+struct IPSRow {
+    #[sqlx(rename = "id")]
+    id: i64, // assuming `id` is the PK (AUTO_INCREMENT) on ipsAlt
+
+    #[sqlx(rename = "packageUUID")]
+    package_uuid: String,
+
+    #[sqlx(rename = "timeStamp")]
+    time_stamp: NaiveDateTime,
+
+    #[sqlx(rename = "patientName")]
+    patient_name: String,
+
+    #[sqlx(rename = "patientGiven")]
+    patient_given: String,
+
+    #[sqlx(rename = "patientDob")]
+    patient_dob: NaiveDateTime,
+
+    #[sqlx(rename = "patientGender")]
+    patient_gender: Option<String>,
+
+    #[sqlx(rename = "patientNation")]
+    patient_nation: String,
+
+    #[sqlx(rename = "patientPractitioner")]
+    patient_practitioner: String,
+
+    #[sqlx(rename = "patientOrganization")]
+    patient_organization: Option<String>,
+
+    #[sqlx(rename = "patientIdentifier")]
+    patient_identifier: Option<String>,
+
+    #[sqlx(rename = "patientIdentifier2")]
+    patient_identifier2: Option<String>,
+}
+
+/// Row for child tables
+#[derive(Debug, FromRow)]
+struct MedicationRow {
+    #[sqlx(rename = "med_name")]
+    name: String,
+
+    #[sqlx(rename = "med_date")]
+    date: NaiveDateTime,
+
+    #[sqlx(rename = "med_dosage")]
+    dosage: String,
+
+    #[sqlx(rename = "med_system")]
+    system: String,
+
+    #[sqlx(rename = "med_code")]
+    code: String,
+
+    #[sqlx(rename = "med_status")]
+    status: String,
+}
+
+#[derive(Debug, FromRow)]
+struct AllergyRow {
+    #[sqlx(rename = "all_name")]
+    name: String,
+    #[sqlx(rename = "all_criticality")]
+    criticality: String,
+    #[sqlx(rename = "all_date")]
+    date: NaiveDateTime,
+    #[sqlx(rename = "all_system")]
+    system: String,
+    #[sqlx(rename = "all_code")]
+    code: String,
+}
+
+#[derive(Debug, FromRow)]
+struct ConditionRow {
+    #[sqlx(rename = "con_name")]
+    name: String,
+    #[sqlx(rename = "con_date")]
+    date: NaiveDateTime,
+    #[sqlx(rename = "con_system")]
+    system: String,
+    #[sqlx(rename = "con_code")]
+    code: String,
+}
+
+#[derive(Debug, FromRow)]
+struct ObservationRow {
+    #[sqlx(rename = "ob_name")]
+    name: String,
+    #[sqlx(rename = "ob_date")]
+    date: NaiveDateTime,
+    #[sqlx(rename = "ob_value")]
+    value: String,
+    #[sqlx(rename = "ob_system")]
+    system: String,
+    #[sqlx(rename = "ob_code")]
+    code: String,
+    #[sqlx(rename = "valueCode")]
+    value_code: String,
+    #[sqlx(rename = "bodySite")]
+    body_site: String,
+    #[sqlx(rename = "ob_status")]
+    status: String,
+}
+
+#[derive(Debug, FromRow)]
+struct ImmunizationRow {
+    #[sqlx(rename = "imm_name")]
+    name: String,
+    #[sqlx(rename = "imm_system")]
+    system: String,
+    #[sqlx(rename = "imm_date")]
+    date: NaiveDateTime,
+    #[sqlx(rename = "imm_code")]
+    code: String,
+    #[sqlx(rename = "imm_status")]
+    status: String,
+}
+
+// =================== API JSON MODELS ===================
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IPSModel {
-    #[serde(rename = "_id")]
-    pub id: ObjectId,
-    pub packageUUID: String,
+    pub package_uuid: String,
+    pub time_stamp: NaiveDateTime,
     pub patient: Patient,
-    pub medication: Vec<Medication>,
+    pub medications: Vec<Medication>,
     pub allergies: Vec<Allergy>,
     pub conditions: Vec<Condition>,
-    #[serde(rename = "__v")]
-    pub version: i32,
+    pub observations: Vec<Observation>,
+    pub immunizations: Vec<Immunization>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Patient {
     pub name: String,
     pub given: String,
-    pub dob: DateTime,
-    pub gender: String,
+    pub dob: NaiveDateTime,
+    pub gender: Option<String>,
     pub nation: String,
     pub practitioner: String,
+    pub organization: Option<String>,
+    pub identifier: Option<String>,
+    pub identifier2: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Medication {
     pub name: String,
-    pub date: DateTime,
+    pub date: NaiveDateTime,
     pub dosage: String,
-    #[serde(rename = "_id")]
-    pub id: ObjectId,
+    pub system: String,
+    pub code: String,
+    pub status: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Allergy {
     pub name: String,
     pub criticality: String,
-    pub date: DateTime,
-    #[serde(rename = "_id")]
-    pub id: ObjectId,
+    pub date: NaiveDateTime,
+    pub system: String,
+    pub code: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Condition {
     pub name: String,
-    pub date: DateTime,
-    #[serde(rename = "_id")]
-    pub id: ObjectId,
+    pub date: NaiveDateTime,
+    pub system: String,
+    pub code: String,
 }
 
-struct DbConnection {
-    db: Database
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Observation {
+    pub name: String,
+    pub date: NaiveDateTime,
+    pub value: String,
+    pub system: String,
+    pub code: String,
+    pub value_code: String,
+    pub body_site: String,
+    pub status: String,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Immunization {
+    pub name: String,
+    pub system: String,
+    pub date: NaiveDateTime,
+    pub code: String,
+    pub status: String,
+}
+
+// =================== ROUTES ===================
 
 #[get("/ips/<package_uuid>")]
-async fn get_ips(package_uuid: String, db: &State<DbConnection>) -> Option<Json<IPSModel>> {
-    // Access the collection
-    let collection = db.db.collection::<IPSModel>("ipsalts");
+async fn get_ips(package_uuid: String, pool: &State<MySqlPool>) -> Option<Json<IPSModel>> {
+    // 1. Fetch main IPS row
+    let ips_row: Option<IPSRow> =
+        sqlx::query_as::<_, IPSRow>(r#"SELECT * FROM ipsAlt WHERE packageUUID = ? LIMIT 1"#)
+            .bind(&package_uuid)
+            .fetch_optional(pool.inner())
+            .await
+            .expect("Failed to query ipsAlt");
 
-    // Find the document by packageUUID
-    let filter = doc! { "packageUUID": package_uuid };
-    match collection.find_one(filter, None).await.unwrap() {
-        Some(document) => Some(Json(document)),
-        None => None,
-    }
+    let ips_row = ips_row?; // return None if not found
+
+    // 2. Fetch child records using the FK (assumed IPSModelId)
+    let medications_rows: Vec<MedicationRow> = sqlx::query_as::<_, MedicationRow>(
+        r#"SELECT
+           `name`   AS med_name,
+           `date`   AS med_date,
+           `dosage` AS med_dosage,
+           `system` AS med_system,
+           `code`   AS med_code,
+           `status` AS med_status
+       FROM `Medications`
+       WHERE `IPSModelId` = ?"#,
+    )
+    .bind(ips_row.id)
+    .fetch_all(pool.inner())
+    .await
+    .expect("Failed to query Medications");
+
+    let allergies_rows: Vec<AllergyRow> = sqlx::query_as::<_, AllergyRow>(
+        r#"SELECT
+           `name`        AS all_name,
+           `criticality` AS all_criticality,
+           `date`        AS all_date,
+           `system`      AS all_system,
+           `code`        AS all_code
+       FROM `Allergies`
+       WHERE `IPSModelId` = ?"#,
+    )
+    .bind(ips_row.id)
+    .fetch_all(pool.inner())
+    .await
+    .expect("Failed to query Allergies");
+
+    let conditions_rows: Vec<ConditionRow> = sqlx::query_as::<_, ConditionRow>(
+        r#"SELECT
+           `name`   AS con_name,
+           `date`   AS con_date,
+           `system` AS con_system,
+           `code`   AS con_code
+       FROM `Conditions`
+       WHERE `IPSModelId` = ?"#,
+    )
+    .bind(ips_row.id)
+    .fetch_all(pool.inner())
+    .await
+    .expect("Failed to query Conditions");
+
+    let observations_rows: Vec<ObservationRow> = sqlx::query_as::<_, ObservationRow>(
+        r#"SELECT
+           `name`      AS ob_name,
+           `date`      AS ob_date,
+           `value`     AS ob_value,
+           `system`    AS ob_system,
+           `code`      AS ob_code,
+           `valueCode` AS valueCode,
+           `bodySite`  AS bodySite,
+           `status`    AS ob_status
+       FROM `Observations`
+       WHERE `IPSModelId` = ?"#,
+    )
+    .bind(ips_row.id)
+    .fetch_all(pool.inner())
+    .await
+    .expect("Failed to query Observations");
+
+    let immunizations_rows: Vec<ImmunizationRow> = sqlx::query_as::<_, ImmunizationRow>(
+        r#"SELECT
+           `name`   AS imm_name,
+           `system` AS imm_system,
+           `date`   AS imm_date,
+           `code`   AS imm_code,
+           `status` AS imm_status
+       FROM `Immunizations`
+       WHERE `IPSModelId` = ?"#,
+    )
+    .bind(ips_row.id)
+    .fetch_all(pool.inner())
+    .await
+    .expect("Failed to query Immunizations");
+
+    // 3. Map rows into API structs
+    let patient = Patient {
+        name: ips_row.patient_name,
+        given: ips_row.patient_given,
+        dob: ips_row.patient_dob,
+        gender: ips_row.patient_gender,
+        nation: ips_row.patient_nation,
+        practitioner: ips_row.patient_practitioner,
+        organization: ips_row.patient_organization,
+        identifier: ips_row.patient_identifier,
+        identifier2: ips_row.patient_identifier2,
+    };
+
+    let medications = medications_rows
+        .into_iter()
+        .map(|m| Medication {
+            name: m.name,
+            date: m.date,
+            dosage: m.dosage,
+            system: m.system,
+            code: m.code,
+            status: m.status,
+        })
+        .collect();
+
+    let allergies = allergies_rows
+        .into_iter()
+        .map(|a| Allergy {
+            name: a.name,
+            criticality: a.criticality,
+            date: a.date,
+            system: a.system,
+            code: a.code,
+        })
+        .collect();
+
+    let conditions = conditions_rows
+        .into_iter()
+        .map(|c| Condition {
+            name: c.name,
+            date: c.date,
+            system: c.system,
+            code: c.code,
+        })
+        .collect();
+
+    let observations = observations_rows
+        .into_iter()
+        .map(|o| Observation {
+            name: o.name,
+            date: o.date,
+            value: o.value,
+            system: o.system,
+            code: o.code,
+            value_code: o.value_code,
+            body_site: o.body_site,
+            status: o.status,
+        })
+        .collect();
+
+    let immunizations = immunizations_rows
+        .into_iter()
+        .map(|i| Immunization {
+            name: i.name,
+            system: i.system,
+            date: i.date,
+            code: i.code,
+            status: i.status,
+        })
+        .collect();
+
+    let ips_model = IPSModel {
+        package_uuid: ips_row.package_uuid,
+        time_stamp: ips_row.time_stamp,
+        patient,
+        medications,
+        allergies,
+        conditions,
+        observations,
+        immunizations,
+    };
+
+    Some(Json(ips_model))
 }
 
-// You normally want to make this a DELETE request, but for simplicity we use GET
+// You normally want DELETE, but keeping GET for compatibility with your old route.
 #[get("/ips/delbypra/<practitioner>")]
-async fn delete_ips_by_practitioner(practitioner: String, db: &State<DbConnection>) -> Json<usize> {
-    // Access the collection
-    let collection = db.db.collection::<IPSModel>("ipsalts");
+async fn delete_ips_by_practitioner(practitioner: String, pool: &State<MySqlPool>) -> Json<u64> {
+    // NOTE: This assumes you have ON DELETE CASCADE set up for child tables.
+    // Otherwise you'd need to delete Medications/Allergies/etc first.
+    let result = sqlx::query(r#"DELETE FROM ipsAlt WHERE patientPractitioner = ?"#)
+        .bind(&practitioner)
+        .execute(pool.inner())
+        .await
+        .expect("Failed to delete from ipsAlt");
 
-    println!("Deleting documents where the practitioner field matches: {}", practitioner);
+    let deleted = result.rows_affected();
+    println!(
+        "Deleted {} rows where patientPractitioner = {}",
+        deleted, practitioner
+    );
 
-    // Delete documents where the practitioner field matches the given value
-    let filter = doc! { "patient.practitioner": practitioner };
-    let result = collection.delete_many(filter, None).await.unwrap();
-
-    Json(result.deleted_count as usize)
+    Json(deleted)
 }
+
+// =================== ROCKET SETUP ===================
 
 #[launch]
 async fn rocket() -> Rocket<Build> {
     dotenv().ok();
-    let mongodb_uri = env::var("MONGODB_URI").expect("MONGODB_URI environment variable not set");
-    let client_options = ClientOptions::parse(&mongodb_uri).await.unwrap();
-    let client = Client::with_options(client_options).unwrap();
-    let db: Database = client.database("test");
+
+    let db_host = env::var("DB_HOST").expect("DB_HOST environment variable not set");
+    let db_name = env::var("DB_NAME").expect("DB_NAME environment variable not set");
+    let db_user = env::var("DB_USER").expect("DB_USER environment variable not set");
+    let db_pass = env::var("DB_PASSWORD").expect("DB_PASSWORD environment variable not set");
+
+    // e.g. mysql://user:pass@localhost/ipsdb
+    let database_url = format!("mysql://{}:{}@{}/{}", db_user, db_pass, db_host, db_name);
+
+    let pool = MySqlPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
+        .await
+        .expect("Failed to create MySQL pool");
 
     rocket::build()
-        .manage(DbConnection { db })
+        .manage(pool)
         .mount("/", routes![get_ips, delete_ips_by_practitioner])
 }

@@ -1,68 +1,72 @@
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
 use super::ResolvesClientCert;
-#[cfg(feature = "logging")]
 use crate::log::{debug, trace};
 use crate::msgs::enums::ExtensionType;
-use crate::msgs::handshake::{CertificatePayload, DistinguishedName};
-use crate::msgs::handshake::{Sct, ServerExtension};
-use crate::{sign, SignatureScheme};
-
-use std::sync::Arc;
+use crate::msgs::handshake::{CertificateChain, DistinguishedName, ProtocolName, ServerExtensions};
+use crate::sync::Arc;
+use crate::{SignatureScheme, compress, sign};
 
 #[derive(Debug)]
-pub(super) struct ServerCertDetails {
-    pub(super) cert_chain: CertificatePayload,
+pub(super) struct ServerCertDetails<'a> {
+    pub(super) cert_chain: CertificateChain<'a>,
     pub(super) ocsp_response: Vec<u8>,
-    pub(super) scts: Option<Vec<Sct>>,
 }
 
-impl ServerCertDetails {
-    pub(super) fn new(
-        cert_chain: CertificatePayload,
-        ocsp_response: Vec<u8>,
-        scts: Option<Vec<Sct>>,
-    ) -> Self {
+impl<'a> ServerCertDetails<'a> {
+    pub(super) fn new(cert_chain: CertificateChain<'a>, ocsp_response: Vec<u8>) -> Self {
         Self {
             cert_chain,
             ocsp_response,
-            scts,
         }
     }
 
-    pub(super) fn scts(&self) -> impl Iterator<Item = &[u8]> {
-        self.scts
-            .as_deref()
-            .unwrap_or(&[])
-            .iter()
-            .map(|payload| payload.as_ref())
+    pub(super) fn into_owned(self) -> ServerCertDetails<'static> {
+        let Self {
+            cert_chain,
+            ocsp_response,
+        } = self;
+        ServerCertDetails {
+            cert_chain: cert_chain.into_owned(),
+            ocsp_response,
+        }
     }
 }
 
 pub(super) struct ClientHelloDetails {
+    pub(super) alpn_protocols: Vec<ProtocolName>,
     pub(super) sent_extensions: Vec<ExtensionType>,
+    pub(super) extension_order_seed: u16,
+    pub(super) offered_cert_compression: bool,
 }
 
 impl ClientHelloDetails {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(alpn_protocols: Vec<ProtocolName>, extension_order_seed: u16) -> Self {
         Self {
+            alpn_protocols,
             sent_extensions: Vec::new(),
+            extension_order_seed,
+            offered_cert_compression: false,
         }
-    }
-
-    pub(super) fn server_may_send_sct_list(&self) -> bool {
-        self.sent_extensions
-            .contains(&ExtensionType::SCT)
     }
 
     pub(super) fn server_sent_unsolicited_extensions(
         &self,
-        received_exts: &[ServerExtension],
+        received_exts: &ServerExtensions<'_>,
         allowed_unsolicited: &[ExtensionType],
     ) -> bool {
-        for ext in received_exts {
-            let ext_type = ext.get_type();
+        let mut extensions = received_exts.collect_used();
+        extensions.extend(
+            received_exts
+                .unknown_extensions
+                .iter()
+                .map(|ext| ExtensionType::from(*ext)),
+        );
+        for ext_type in extensions {
             if !self.sent_extensions.contains(&ext_type) && !allowed_unsolicited.contains(&ext_type)
             {
-                trace!("Unsolicited extension {:?}", ext_type);
+                trace!("Unsolicited extension {ext_type:?}");
                 return true;
             }
         }
@@ -79,6 +83,7 @@ pub(super) enum ClientAuthDetails {
         certkey: Arc<sign::CertifiedKey>,
         signer: Box<dyn sign::Signer>,
         auth_context_tls13: Option<Vec<u8>>,
+        compressor: Option<&'static dyn compress::CertCompressor>,
     },
 }
 
@@ -88,6 +93,7 @@ impl ClientAuthDetails {
         canames: Option<&[DistinguishedName]>,
         sigschemes: &[SignatureScheme],
         auth_context_tls13: Option<Vec<u8>>,
+        compressor: Option<&'static dyn compress::CertCompressor>,
     ) -> Self {
         let acceptable_issuers = canames
             .unwrap_or_default()
@@ -102,6 +108,7 @@ impl ClientAuthDetails {
                     certkey,
                     signer,
                     auth_context_tls13,
+                    compressor,
                 };
             }
         }

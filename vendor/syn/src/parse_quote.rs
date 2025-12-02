@@ -113,6 +113,7 @@ use proc_macro2::TokenStream;
 
 // Not public API.
 #[doc(hidden)]
+#[track_caller]
 pub fn parse<T: ParseQuote>(token_stream: TokenStream) -> T {
     let parser = T::parse;
     match parser.parse2(token_stream) {
@@ -149,6 +150,17 @@ impl ParseQuote for Attribute {
         } else {
             attr::parsing::single_parse_outer(input)
         }
+    }
+}
+
+#[cfg(any(feature = "full", feature = "derive"))]
+impl ParseQuote for Vec<Attribute> {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut attrs = Vec::new();
+        while !input.is_empty() {
+            attrs.push(ParseQuote::parse(input)?);
+        }
+        Ok(attrs)
     }
 }
 

@@ -72,27 +72,64 @@ pub const SKMSG_FOBTAINFD: usize = 2;
 
 // TODO: Split SendFdFlags into caller flags and flags that the scheme receives?
 bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug)]
     pub struct SendFdFlags: usize {
-        /// If set, the kernel will enforce that the file descriptor is exclusively owned.
+        /// If set, the kernel will enforce that the file descriptors are exclusively owned.
         ///
-        /// That is, there will no longer exist any other reference to that FD when removed from
-        /// the file table (SYS_SENDFD always removes the FD from the file table, but without this
-        /// flag, it can be retained by SYS_DUPing it first).
+        /// That is, there will no longer exist any other reference to those FDs when removed from
+        /// the file table (sendfd always removes the FDs from the file table, but without this
+        /// flag, it can be retained by SYS_DUPing them first).
         const EXCLUSIVE = 1;
+
+        /// If set, the file descriptors will be cloned and *not* removed from the sender's file table.
+        /// By default, `SYS_SENDFD` moves the file descriptors, removing them from the sender.
+        const CLONE = 2;
     }
 }
 bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug)]
     pub struct FobtainFdFlags: usize {
-        /// If set, `packet.c` specifies the destination file descriptor slot, otherwise the lowest
-        /// available slot will be selected, and placed in the usize pointed to by `packet.c`.
+        /// If set, the SYS_CALL payload specifies the destination file descriptor slots, otherwise the lowest
+        /// available slots will be selected, and placed in the usize pointed to by SYS_CALL
+        /// payload.
         const MANUAL_FD = 1;
 
-        // If set, the file descriptor received is guaranteed to be exclusively owned (by the file
-        // table the obtainer is running in).
+        /// If set, the file descriptors received are guaranteed to be exclusively owned (by the file
+        /// table the obtainer is running in).
         const EXCLUSIVE = 2;
+
+        /// If set, the file descriptors received will be placed into the *upper* file table.
+        const UPPER_TBL = 4;
 
         // No, cloexec won't be stored in the kernel in the future, when the stable ABI is moved to
         // relibc, so no flag for that!
+    }
+}
+bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug)]
+    pub struct RecvFdFlags: usize {
+        /// If set, the SYS_CALL payload specifies the destination file descriptor slots, otherwise the lowest
+        /// available slots will be selected, and placed in the usize pointed to by SYS_CALL
+        /// payload.
+        const MANUAL_FD = 1;
+
+        /// If set, the file descriptors received will be placed into the *upper* file table.
+        const UPPER_TBL = 2;
+    }
+}
+bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug)]
+    pub struct FmoveFdFlags: usize {
+        /// If set, the kernel will enforce that the file descriptors are exclusively owned.
+        ///
+        /// That is, there will no longer exist any other reference to those FDs when removed from
+        /// the file table (SYS_CALL always removes the FDs from the file table, but without this
+        /// flag, it can be retained by SYS_DUPing them first).
+        const EXCLUSIVE = 1;
+
+        /// If set, the file descriptors will be cloned and *not* removed from the sender's file table.
+        /// By default, sendfd moves the file descriptors, removing them from the sender.
+        const CLONE = 2;
     }
 }
 
@@ -142,31 +179,113 @@ pub const MODE_FILE: u16 = 0x8000;
 pub const MODE_SYMLINK: u16 = 0xA000;
 pub const MODE_FIFO: u16 = 0x1000;
 pub const MODE_CHR: u16 = 0x2000;
+pub const MODE_SOCK: u16 = 0xC000;
 
 pub const MODE_PERM: u16 = 0x0FFF;
 pub const MODE_SETUID: u16 = 0o4000;
 pub const MODE_SETGID: u16 = 0o2000;
 
-pub const O_RDONLY: usize =     0x0001_0000;
-pub const O_WRONLY: usize =     0x0002_0000;
-pub const O_RDWR: usize =       0x0003_0000;
-pub const O_NONBLOCK: usize =   0x0004_0000;
-pub const O_APPEND: usize =     0x0008_0000;
-pub const O_SHLOCK: usize =     0x0010_0000;
-pub const O_EXLOCK: usize =     0x0020_0000;
-pub const O_ASYNC: usize =      0x0040_0000;
-pub const O_FSYNC: usize =      0x0080_0000;
-pub const O_CLOEXEC: usize =    0x0100_0000;
-pub const O_CREAT: usize =      0x0200_0000;
-pub const O_TRUNC: usize =      0x0400_0000;
-pub const O_EXCL: usize =       0x0800_0000;
-pub const O_DIRECTORY: usize =  0x1000_0000;
-pub const O_STAT: usize =       0x2000_0000;
-pub const O_SYMLINK: usize =    0x4000_0000;
-pub const O_NOFOLLOW: usize =   0x8000_0000;
-pub const O_ACCMODE: usize =    O_RDONLY | O_WRONLY | O_RDWR;
+pub const O_RDONLY: usize = 0x0001_0000;
+pub const O_WRONLY: usize = 0x0002_0000;
+pub const O_RDWR: usize = 0x0003_0000;
+pub const O_NONBLOCK: usize = 0x0004_0000;
+pub const O_APPEND: usize = 0x0008_0000;
+pub const O_SHLOCK: usize = 0x0010_0000;
+pub const O_EXLOCK: usize = 0x0020_0000;
+pub const O_ASYNC: usize = 0x0040_0000;
+pub const O_FSYNC: usize = 0x0080_0000;
+pub const O_CLOEXEC: usize = 0x0100_0000;
+pub const O_CREAT: usize = 0x0200_0000;
+pub const O_TRUNC: usize = 0x0400_0000;
+pub const O_EXCL: usize = 0x0800_0000;
+pub const O_DIRECTORY: usize = 0x1000_0000;
+pub const O_STAT: usize = 0x2000_0000;
+pub const O_SYMLINK: usize = 0x4000_0000;
+pub const O_NOFOLLOW: usize = 0x8000_0000;
+pub const O_ACCMODE: usize = O_RDONLY | O_WRONLY | O_RDWR;
 
 // The top 48 bits of PTRACE_* are reserved, for now
+
+// NOT ABI STABLE!
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(usize)]
+pub enum ContextStatus {
+    Runnable,
+    Blocked,
+    NotYetStarted,
+    Dead,
+    ForceKilled,
+    Stopped,
+    UnhandledExcp,
+    #[default]
+    Other, // reserved
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(usize)]
+pub enum ContextVerb {
+    Stop = 1,
+    Unstop = 2,
+    Interrupt = 3,
+    ForceKill = usize::MAX,
+}
+impl ContextVerb {
+    pub fn try_from_raw(raw: usize) -> Option<Self> {
+        Some(match raw {
+            1 => Self::Stop,
+            2 => Self::Unstop,
+            3 => Self::Interrupt,
+            usize::MAX => Self::ForceKill,
+            _ => return None,
+        })
+    }
+}
+
+// NOT ABI STABLE!
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum ProcSchemeVerb {
+    Iopl = 255,
+}
+impl ProcSchemeVerb {
+    pub fn try_from_raw(verb: u8) -> Option<Self> {
+        Some(match verb {
+            255 => Self::Iopl,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(usize)]
+pub enum SchemeSocketCall {
+    ObtainFd = 0,
+    MoveFd = 1,
+}
+impl SchemeSocketCall {
+    pub fn try_from_raw(raw: usize) -> Option<Self> {
+        Some(match raw {
+            0 => Self::ObtainFd,
+            1 => Self::MoveFd,
+            _ => return None,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(usize)]
+#[non_exhaustive]
+pub enum FsCall {
+    Connect = 0,
+}
+impl FsCall {
+    pub fn try_from_raw(raw: usize) -> Option<Self> {
+        Some(match raw {
+            0 => Self::Connect,
+            _ => return None,
+        })
+    }
+}
 
 bitflags! {
     pub struct PtraceFlags: u64 {
@@ -211,10 +330,7 @@ impl Deref for PtraceFlags {
     fn deref(&self) -> &Self::Target {
         // Same as to_ne_bytes but in-place
         unsafe {
-            slice::from_raw_parts(
-                &self.bits() as *const _ as *const u8,
-                mem::size_of::<u64>()
-            )
+            slice::from_raw_parts(&self.bits() as *const _ as *const u8, mem::size_of::<u64>())
         }
     }
 }
@@ -223,115 +339,68 @@ pub const SEEK_SET: usize = 0;
 pub const SEEK_CUR: usize = 1;
 pub const SEEK_END: usize = 2;
 
-pub const SIGHUP: usize =   1;
-pub const SIGINT: usize =   2;
-pub const SIGQUIT: usize =  3;
-pub const SIGILL: usize =   4;
-pub const SIGTRAP: usize =  5;
-pub const SIGABRT: usize =  6;
-pub const SIGBUS: usize =   7;
-pub const SIGFPE: usize =   8;
-pub const SIGKILL: usize =  9;
-pub const SIGUSR1: usize =  10;
-pub const SIGSEGV: usize =  11;
-pub const SIGUSR2: usize =  12;
-pub const SIGPIPE: usize =  13;
-pub const SIGALRM: usize =  14;
-pub const SIGTERM: usize =  15;
-pub const SIGSTKFLT: usize= 16;
-pub const SIGCHLD: usize =  17;
-pub const SIGCONT: usize =  18;
-pub const SIGSTOP: usize =  19;
-pub const SIGTSTP: usize =  20;
-pub const SIGTTIN: usize =  21;
-pub const SIGTTOU: usize =  22;
-pub const SIGURG: usize =   23;
-pub const SIGXCPU: usize =  24;
-pub const SIGXFSZ: usize =  25;
-pub const SIGVTALRM: usize= 26;
-pub const SIGPROF: usize =  27;
-pub const SIGWINCH: usize = 28;
-pub const SIGIO: usize =    29;
-pub const SIGPWR: usize =   30;
-pub const SIGSYS: usize =   31;
-
-pub const SIG_DFL: usize = 0;
-pub const SIG_IGN: usize = 1;
-
-pub const SIG_BLOCK: usize = 0;
-pub const SIG_UNBLOCK: usize = 1;
-pub const SIG_SETMASK: usize = 2;
-
-bitflags! {
-    pub struct SigActionFlags: usize {
-        const SA_NOCLDSTOP = 0x00000001;
-        const SA_NOCLDWAIT = 0x00000002;
-        const SA_SIGINFO =   0x00000004;
-        const SA_RESTORER =  0x04000000;
-        const SA_ONSTACK =   0x08000000;
-        const SA_RESTART =   0x10000000;
-        const SA_NODEFER =   0x40000000;
-        const SA_RESETHAND = 0x80000000;
-    }
-}
-
-bitflags! {
-    pub struct WaitFlags: usize {
-        const WNOHANG =    0x01;
-        const WUNTRACED =  0x02;
-        const WCONTINUED = 0x08;
-    }
-}
+pub const SIGCHLD: usize = 17;
+pub const SIGTSTP: usize = 20;
+pub const SIGTTIN: usize = 21;
+pub const SIGTTOU: usize = 22;
 
 pub const ADDRSPACE_OP_MMAP: usize = 0;
 pub const ADDRSPACE_OP_MUNMAP: usize = 1;
 pub const ADDRSPACE_OP_MPROTECT: usize = 2;
 pub const ADDRSPACE_OP_TRANSFER: usize = 3;
 
-/// True if status indicates the child is stopped.
-pub fn wifstopped(status: usize) -> bool {
-    (status & 0xff) == 0x7f
-}
-
-/// If wifstopped(status), the signal that stopped the child.
-pub fn wstopsig(status: usize) -> usize {
-    (status >> 8) & 0xff
-}
-
-/// True if status indicates the child continued after a stop.
-pub fn wifcontinued(status: usize) -> bool {
-    status == 0xffff
-}
-
-/// True if STATUS indicates termination by a signal.
-pub fn wifsignaled(status: usize) -> bool {
-    ((status & 0x7f) + 1) as i8 >= 2
-}
-
-/// If wifsignaled(status), the terminating signal.
-pub fn wtermsig(status: usize) -> usize {
-    status & 0x7f
-}
-
-/// True if status indicates normal termination.
-pub fn wifexited(status: usize) -> bool {
-    wtermsig(status) == 0
-}
-
-/// If wifexited(status), the exit status.
-pub fn wexitstatus(status: usize) -> usize {
-    (status >> 8) & 0xff
-}
-
-/// True if status indicates a core dump was created.
-pub fn wcoredump(status: usize) -> bool {
-    (status & 0x80) != 0
-}
-
 bitflags! {
     pub struct MremapFlags: usize {
         const FIXED = 1;
         const FIXED_REPLACE = 3;
+        /// Alias's memory region at `old_address` to `new_address` such that both regions share
+        /// the same frames.
+        const KEEP_OLD = 1 << 2;
         // TODO: MAYMOVE, DONTUNMAP
     }
 }
+bitflags! {
+    pub struct RwFlags: u32 {
+        const NONBLOCK = 1;
+        const APPEND = 2;
+        // TODO: sync/dsync
+        // TODO: O_DIRECT?
+    }
+}
+bitflags! {
+    pub struct SigcontrolFlags: usize {
+        /// Prevents the kernel from jumping the context to the signal trampoline, but otherwise
+        /// has absolutely no effect on which signals are blocked etc. Meant to be used for
+        /// short-lived critical sections inside libc.
+        const INHIBIT_DELIVERY = 1;
+    }
+}
+bitflags! {
+    pub struct CallFlags: usize {
+        // reserved
+        const RSVD0 = 1 << 0;
+        const RSVD1 = 1 << 1;
+        const RSVD2 = 1 << 2;
+        const RSVD3 = 1 << 3;
+        const RSVD4 = 1 << 4;
+        const RSVD5 = 1 << 5;
+        const RSVD6 = 1 << 6;
+        const RSVD7 = 1 << 7;
+
+        /// Remove the fd from the caller's file table before sending the message.
+        const CONSUME = 1 << 8;
+
+        const WRITE = 1 << 9;
+        const READ = 1 << 10;
+
+        /// Indicates the request is a bulk fd passing request.
+        const FD = 1 << 11;
+        /// Flags for the fd passing request.
+        const FD_EXCLUSIVE = 1 << 12;
+        const FD_CLONE = 1 << 13;
+        const FD_UPPER = 1 << 14;
+    }
+}
+
+/// The tag for the fd number in the upper file descriptor table.
+pub const UPPER_FDTBL_TAG: usize = 1 << (usize::BITS - 2);
