@@ -1,15 +1,15 @@
 FROM mcr.microsoft.com/devcontainers/rust:1
 
+# ✅ Remove ImageMagick to eliminate CVEs
+RUN apt-get update \
+ && apt-get purge -y imagemagick imagemagick-7-common imagemagick-7.q16 'libmagick*' \
+ && apt-get autoremove -y \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copy the compiled binary
 COPY target/release/rocketRust ./rocketRust
-
-# Copy templates directory (needed at runtime)
 COPY templates ./templates
-
-# (Optional) if you have Rocket.toml with config, copy it too:
-# COPY Rocket.toml ./Rocket.toml
 
 EXPOSE 8000
 CMD ["./rocketRust"]
