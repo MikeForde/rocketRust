@@ -6,6 +6,7 @@ target/*
 
 # Ignore everything inside release
 target/release/*
+
 # Re-include the one binary we want
 !target/release/rocketRust
 
