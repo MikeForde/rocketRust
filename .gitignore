@@ -1,21 +1,20 @@
-# Ignore everything under target/
-target/**
-.env
+# Ignore build output under target
+target/*
 
-# BUT allow this directory
-!target/
+# Re-include the release directory itself
 !target/release/
-!target/release/rocketRust
 
-# Ignore all other build artefacts inside release/
-target/release/*.d
-target/release/*.rlib
-target/release/*.rmeta
-target/release/deps/
-target/release/build/
+# Ignore everything inside release
+target/release/*
+
+# Re-include the one binary we want
+!target/release/rocketRust
 
 # Let's no keep updating Vendor as we are sticking with a pre-compile binary approach during development
 vendor/
+
+# Local secrets
+.env
 
 # macOS junk
 .DS_Store

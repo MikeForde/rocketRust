@@ -1,9 +1,0 @@
-[source.crates-io]
-replace-with = "vendored-sources"
-
-[source.vendored-sources]
-directory = "vendor"
-
-[net]
-# Make it explicit we want to be able to build offline in CI/OpenShift
-retry = 0
