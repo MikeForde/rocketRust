@@ -1,11 +1,5 @@
 # Ignore build output under target
-target/*
-
-# Re-include the release directory itself
-!target/release/
-
-# Ignore everything inside release
-target/release/*
+target/**
 
 # Re-include the one binary we want
 !target/release/rocketRust
