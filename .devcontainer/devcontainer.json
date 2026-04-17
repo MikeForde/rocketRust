@@ -5,7 +5,10 @@
     "context": "..",
     "options": ["--platform=linux/amd64"]
   },
-  "remoteUser": "root",
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "PATH": "/home/vscode/.opencode/bin:${containerEnv:PATH}"
+  },
   "features": {
     "ghcr.io/devcontainers/features/git:1": {}
   },
@@ -23,5 +26,5 @@
       ]
     }
   },
-  "postCreateCommand": "cargo --version || true"
+  "postCreateCommand": "cargo --version || true; if ! command -v curl >/dev/null 2>&1; then sudo apt-get update && sudo apt-get install -y curl; fi; if [ ! -x \"$HOME/.opencode/bin/opencode\" ]; then curl -fsSL https://opencode.ai/install | bash; fi; \"$HOME/.opencode/bin/opencode\" --help >/dev/null || true"
 }
