@@ -1,12 +1,9 @@
-FROM mcr.microsoft.com/devcontainers/rust:1
+# Runtime-only image
+FROM debian:bookworm-slim
 
-# ✅ Remove ImageMagick to eliminate CVEs
-RUN set -eux; \
-  pkgs="$(dpkg-query -W -f='${Package}\n' | grep -E '^(imagemagick|libmagick)' || true)"; \
-  if [ -n "$pkgs" ]; then \
-    dpkg --purge $pkgs; \
-  fi; \
-  rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
