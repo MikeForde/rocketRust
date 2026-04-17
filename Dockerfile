@@ -1,9 +1,7 @@
-# Runtime-only image
-FROM debian:bookworm-slim
+FROM registry.access.redhat.com/ubi9/ubi-minimal
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN microdnf install -y ca-certificates \
+    && microdnf clean all
 
 WORKDIR /app
 
