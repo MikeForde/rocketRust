@@ -5,7 +5,7 @@ mod db;
 mod models;
 mod routes;
 
-use dotenv::dotenv;
+use dotenvy::dotenv;
 use rocket::{Build, Rocket};
 use rocket_dyn_templates::Template;
 use sqlx::mysql::MySqlPoolOptions;
